@@ -1,0 +1,26 @@
+#!/bin/bash
+
+# EasyPanel pre-installation script
+
+set -e
+
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then
+    echo "This package must be installed as root"
+    exit 1
+fi
+
+# Check OS compatibility
+if [ ! -f /etc/os-release ]; then
+    echo "Unsupported operating system"
+    exit 1
+fi
+
+source /etc/os-release
+
+if [[ ! "$ID" =~ ^(debian|ubuntu)$ ]]; then
+    echo "Warning: This package is designed for Debian/Ubuntu"
+    echo "Continuing anyway..."
+fi
+
+exit 0

@@ -1,0 +1,25 @@
+Package: easypanel
+Version: 1.0.0
+Architecture: all
+Maintainer: EasyPanel Contributors <maintainer@easypanel.io>
+Depends: bash, curl, wget, gnupg2, lsb-release, apt-transport-https
+Homepage: https://github.com/easypanel/easypanel
+Description: Terminal-based Web Server Control Panel
+ EasyPanel is a comprehensive terminal-based control panel for managing
+ web servers, domains, databases, mail services, DNS, and more on Linux servers.
+ .
+ Supported features:
+  - Apache2 and Nginx web server management
+  - Domain management with Let's Encrypt SSL support
+  - MySQL and MariaDB database management
+  - Mail server configuration (Postfix, Dovecot)
+  - DNS zone management (BIND9)
+  - Cron job scheduling and management
+  - Full system backup and restore capabilities
+  - Firewall and security management
+  - Multi-domain management
+ .
+ Requirements:
+  - Debian or Ubuntu Linux
+  - Root or sudo access
+  - 100MB free disk space

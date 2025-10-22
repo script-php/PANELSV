@@ -1,0 +1,22 @@
+Format: 3.0 (native)
+Source: easypanel
+Binary: easypanel
+Architecture: any
+Version: 1.0.0
+Maintainer: EasyPanel Contributors <maintainer@easypanel.io>
+Homepage: https://github.com/easypanel/easypanel
+Standards-Version: 4.6.0
+Build-Depends: debhelper-compat (= 13)
+Description: Terminal-based Web Server Control Panel
+ EasyPanel is a comprehensive terminal-based control panel for managing
+ web servers, domains, databases, mail services, DNS, and more.
+ .
+ Features:
+  - Web server management (Apache2, Nginx)
+  - Domain and SSL certificate management
+  - Database management (MySQL, MariaDB)
+  - Mail server configuration
+  - DNS zone management
+  - Cron job scheduling
+  - System backup and restore
+  - Firewall management

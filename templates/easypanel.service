@@ -1,0 +1,14 @@
+[Unit]
+Description=EasyPanel Watch Service
+Documentation=https://github.com/easypanel/easypanel
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/easypanel-watch
+User=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# EasyPanel post-installation script
+
+set -e
+
+# Create necessary directories
+mkdir -p /etc/easypanel
+mkdir -p /var/log/easypanel
+mkdir -p /root/websites
+mkdir -p /root/backups
+
+# Set permissions
+chmod 755 /etc/easypanel
+chmod 755 /var/log/easypanel
+chmod 755 /root/websites
+chmod 755 /root/backups
+
+# Initialize configuration if it doesn't exist
+if [ ! -f /etc/easypanel/config ]; then
+    cat > /etc/easypanel/config << 'EOF'
+# EasyPanel Configuration
+# Auto-generated during installation
+
+WEB_SERVER=""
+DATABASE=""
+SERVICES_INSTALLED=""
+PANEL_INSTALLED_DATE="$(date)"
+PANEL_VERSION="1.0.0"
+EOF
+    chmod 600 /etc/easypanel/config
+fi
+
+# Create symlink for easy access
+if [ ! -L /usr/local/bin/easypanel ]; then
+    ln -s /usr/local/bin/easypanel-bin /usr/local/bin/easypanel
+fi
+
+# Initialize logging
+touch /var/log/easypanel.log
+chmod 644 /var/log/easypanel.log
+
+echo "EasyPanel installed successfully!"
+echo "Run 'easypanel' or 'easypanel install' to get started."
+
+exit 0

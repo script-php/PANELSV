@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# EasyPanel post-removal script
+
+set -e
+
+# Remove configuration directory if empty
+if [ -d /etc/easypanel ]; then
+    rmdir /etc/easypanel 2>/dev/null || true
+fi
+
+# Remove log directory if empty
+if [ -d /var/log/easypanel ]; then
+    rmdir /var/log/easypanel 2>/dev/null || true
+fi
+
+# Remove symlink
+if [ -L /usr/local/bin/easypanel ]; then
+    rm /usr/local/bin/easypanel
+fi
+
+echo "EasyPanel uninstalled."
+
+exit 0
