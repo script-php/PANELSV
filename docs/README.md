@@ -223,13 +223,15 @@ sudo easypanel version
 ```
 /root/websites/
 ├── domain1.com/
-│   ├── htdocs/          # Website files
-│   ├── config/          # Custom web server configs
-│   └── logs/            # Access and error logs
+│   ├── htdocs/              # Website files
+│   ├── config/              # Custom web server configs
+│   ├── logs/                # Access and error logs
+│   └── certificates/        # SSL certificates
 ├── domain2.com/
 │   ├── htdocs/
 │   ├── config/
-│   └── logs/
+│   ├── logs/
+│   └── certificates/
 ...
 
 /etc/easypanel/

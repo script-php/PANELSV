@@ -129,7 +129,9 @@ add_database_backup_cron() {
 add_ssl_renewal_cron() {
     print_info "SSL certificates will be renewed automatically"
     
-    local command="0 3 * * * root /usr/bin/certbot renew --non-interactive --quiet"
+    local command="0 3 * * * root /root/easypanel_ssl_renew.sh"
+    
+    create_ssl_renewal_script
     
     (crontab -u root -l 2>/dev/null; echo "$command") | crontab -u root - 2>/dev/null
     
@@ -316,6 +318,50 @@ esac
 
 # Keep only last 7 days of backups
 find "$BACKUP_ROOT" -type f -mtime +7 -delete
+SCRIPT_EOF
+    
+    chmod 755 "$script_file"
+}
+
+# Create SSL renewal script
+create_ssl_renewal_script() {
+    local script_file="/root/easypanel_ssl_renew.sh"
+    
+    if [ -f "$script_file" ]; then
+        return
+    fi
+    
+    cat > "$script_file" << 'SCRIPT_EOF'
+#!/bin/bash
+
+# Source EasyPanel utilities
+source /usr/local/lib/easypanel/utils.sh
+
+# Renew all certificates
+certbot renew --non-interactive --quiet 2>/dev/null
+
+# Copy renewed certificates to domain directories
+WEBSITES_ROOT="/root/websites"
+if [ -d "$WEBSITES_ROOT" ]; then
+    for domain_dir in "$WEBSITES_ROOT"/*; do
+        if [ -d "$domain_dir" ]; then
+            domain=$(basename "$domain_dir")
+            cert_source="/etc/letsencrypt/live/$domain"
+            cert_dest="$domain_dir/certificates"
+            
+            if [ -d "$cert_source" ] && [ -d "$cert_dest" ]; then
+                cp -r "$cert_source"/* "$cert_dest/" 2>/dev/null
+                chmod 644 "$cert_dest"/*.pem 2>/dev/null
+                chmod 600 "$cert_dest"/privkey.pem 2>/dev/null
+                chown -R root:root "$cert_dest" 2>/dev/null
+            fi
+        fi
+    done
+fi
+
+# Reload web servers to use updated certificates
+systemctl reload apache2 2>/dev/null
+systemctl reload nginx 2>/dev/null
 SCRIPT_EOF
     
     chmod 755 "$script_file"

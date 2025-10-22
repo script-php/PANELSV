@@ -67,12 +67,15 @@ PANELSV/
 ### 3. **Domain Management** (domains.sh)
 - ✅ Add/Edit/Delete domains
 - ✅ Automatic directory structure creation
+- ✅ Automatic domain directory structure creation with:
   - `/root/websites/domain.com/htdocs/`
   - `/root/websites/domain.com/config/`
   - `/root/websites/domain.com/logs/`
+  - `/root/websites/domain.com/certificates/` (Local SSL storage)
 - ✅ Web server configuration (Apache2 & Nginx)
-- ✅ SSL certificate management
-- ✅ Automatic renewals
+- ✅ SSL certificate management with Let's Encrypt
+- ✅ Certificates stored locally per domain (not system-wide)
+- ✅ Automatic certificate renewal with local copies
 - ✅ DNS support option
 - ✅ Mail support option
 - ✅ Custom domain configurations

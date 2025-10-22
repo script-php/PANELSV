@@ -201,9 +201,9 @@ create_apache_config() {
     </IfModule>
     
     SSLEngine on
-    SSLCertificateFile /etc/letsencrypt/live/$domain/cert.pem
-    SSLCertificateKeyFile /etc/letsencrypt/live/$domain/privkey.pem
-    SSLCertificateChainFile /etc/letsencrypt/live/$domain/chain.pem
+    SSLCertificateFile /root/websites/$domain/certificates/cert.pem
+    SSLCertificateKeyFile /root/websites/$domain/certificates/privkey.pem
+    SSLCertificateChainFile /root/websites/$domain/certificates/chain.pem
 </VirtualHost>
 EOF
     
@@ -275,8 +275,8 @@ server {
     error_log /root/websites/$domain/logs/error.log;
     access_log /root/websites/$domain/logs/access.log;
     
-    ssl_certificate /etc/letsencrypt/live/$domain/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$domain/privkey.pem;
+    ssl_certificate /root/websites/$domain/certificates/fullchain.pem;
+    ssl_certificate_key /root/websites/$domain/certificates/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
     ssl_prefer_server_ciphers on;
@@ -384,6 +384,9 @@ install_ssl_certificate() {
     if certbot certonly --${certbot_plugin} -d "$domain" -d "www.$domain" \
         --non-interactive --agree-tos -m admin@${domain} 2>/dev/null; then
         
+        # Copy certificates to domain directory
+        copy_ssl_certificates_local "$domain"
+        
         # Update web server configuration if needed
         if [ "$web_server" = "apache2" ]; then
             a2enmod ssl 2>/dev/null
@@ -406,6 +409,9 @@ renew_ssl_certificate() {
     print_info "Renewing SSL certificate for $domain..."
     
     if certbot renew --cert-name "$domain" --non-interactive 2>/dev/null; then
+        # Copy updated certificates to domain directory
+        copy_ssl_certificates_local "$domain"
+        
         print_success "SSL certificate renewed for $domain"
     else
         print_error "Failed to renew SSL certificate"

@@ -314,6 +314,7 @@ create_domain_structure() {
     create_directory "$WEBSITES_ROOT/$domain/htdocs" "$owner" "755"
     create_directory "$WEBSITES_ROOT/$domain/config" "root" "755"
     create_directory "$WEBSITES_ROOT/$domain/logs" "$owner" "755"
+    create_directory "$WEBSITES_ROOT/$domain/certificates" "root" "755"
     
     print_success "Created directory structure for domain: $domain"
 }
@@ -496,6 +497,27 @@ pause_menu() {
     read -p "Press Enter to continue..."
 }
 
+copy_ssl_certificates_local() {
+    local domain="$1"
+    local cert_source="/etc/letsencrypt/live/$domain"
+    local cert_dest="$WEBSITES_ROOT/$domain/certificates"
+    
+    if [ ! -d "$cert_source" ]; then
+        print_warning "Source certificate directory not found: $cert_source"
+        return 1
+    fi
+    
+    # Copy all certificate files
+    cp -r "$cert_source"/* "$cert_dest/" 2>/dev/null
+    
+    # Ensure proper permissions
+    chmod 644 "$cert_dest"/*.pem 2>/dev/null
+    chmod 600 "$cert_dest"/privkey.pem 2>/dev/null
+    chown -R root:root "$cert_dest" 2>/dev/null
+    
+    print_success "Certificates copied to: $cert_dest"
+}
+
 # Export all functions for use in other scripts
 export -f print_header print_success print_error print_warning print_info print_separator
 export -f log_message init_logging prompt_yes_no print_menu get_input
@@ -506,4 +528,4 @@ export -f create_domain_structure remove_domain_structure list_domains
 export -f die execute_command
 export -f validate_domain validate_email validate_ip validate_username
 export -f start_service stop_service restart_service enable_service disable_service
-export -f pause_menu
+export -f copy_ssl_certificates_local pause_menu
