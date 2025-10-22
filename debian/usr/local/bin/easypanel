@@ -5,12 +5,9 @@
 # Sources all necessary libraries and launches the main application
 ################################################################################
 
-# Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Set up library path
-export EASYPANEL_LIB_DIR="${SCRIPT_DIR}/../lib"
-export EASYPANEL_MODULES_DIR="${SCRIPT_DIR}/../lib/easypanel/modules"
+# Set up library path (absolute paths)
+export EASYPANEL_LIB_DIR="/usr/local/lib/easypanel"
+export EASYPANEL_MODULES_DIR="/usr/local/lib/easypanel/modules"
 
 # Check if library exists
 if [ ! -f "$EASYPANEL_LIB_DIR/utils.sh" ]; then
@@ -23,7 +20,7 @@ fi
 source "$EASYPANEL_LIB_DIR/utils.sh"
 
 # Check if main script exists
-MAIN_SCRIPT="$SCRIPT_DIR/easypanel-bin"
+MAIN_SCRIPT="/usr/local/bin/easypanel-bin"
 if [ ! -f "$MAIN_SCRIPT" ]; then
     echo "Error: Cannot find main script at $MAIN_SCRIPT"
     echo "EasyPanel may not be installed correctly."
