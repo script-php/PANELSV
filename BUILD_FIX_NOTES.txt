@@ -1,0 +1,114 @@
+# Build Script Fix - Directory Creation Issue
+
+## Problem Encountered
+
+When running `sudo bash build.sh`, the build failed with:
+```
+cp cannot create regular file '/home/dev/PANELSV/debian/usr/local/bin/easypanel-bin' 
+no such file or directory
+```
+
+## Root Cause
+
+The build script was attempting to copy files before ensuring that the target directories existed. While the directory structure was present in the repository, the build process needs to explicitly create these directories as part of the build procedure.
+
+## Solution Applied
+
+Updated `build.sh` to create all necessary directories before attempting file copies.
+
+### Changes Made
+
+**File:** `build.sh` (Lines 24-25)
+
+**Before:**
+```bash
+# Copy scripts to debian package structure
+echo "Preparing package files..."
+
+# Copy main script
+cp "$SCRIPT_DIR/src/main.sh" "$SCRIPT_DIR/debian/usr/local/bin/easypanel-bin"
+```
+
+**After:**
+```bash
+# Copy scripts to debian package structure
+echo "Preparing package files..."
+
+# Create necessary directories
+mkdir -p "$SCRIPT_DIR/debian/usr/local/bin"
+mkdir -p "$SCRIPT_DIR/debian/usr/local/lib/easypanel/modules"
+
+# Copy main script
+cp "$SCRIPT_DIR/src/main.sh" "$SCRIPT_DIR/debian/usr/local/bin/easypanel-bin"
+```
+
+Additionally removed redundant `mkdir -p` commands that appeared later in the script:
+- Removed duplicate `mkdir -p "$SCRIPT_DIR/debian/usr/local/lib/easypanel"` (line ~34)
+- Removed duplicate `mkdir -p "$SCRIPT_DIR/debian/usr/local/lib/easypanel/modules"` (line ~40)
+
+## Directories Created
+
+The build script now creates:
+1. `debian/usr/local/bin/` - For executable wrapper script
+2. `debian/usr/local/lib/easypanel/modules/` - For module scripts
+
+## How to Build Now
+
+```bash
+sudo bash build.sh
+```
+
+The script will:
+1. ✅ Create necessary directories
+2. ✅ Copy all source files to package structure
+3. ✅ Set correct permissions
+4. ✅ Generate md5sums
+5. ✅ Build the .deb package
+6. ✅ Generate SHA256 checksum
+
+## Build Output
+
+If successful, you'll see:
+```
+EasyPanel Package Builder v1.0.0
+======================================
+
+Preparing package files...
+Creating md5sums...
+Building .deb package...
+
+✓ Package built successfully!
+  Output: ./dist/easypanel_1.0.0_all.deb
+  Size: [SIZE]
+
+Package Information:
+[Package details...]
+```
+
+## Installation
+
+After build succeeds:
+
+```bash
+sudo dpkg -i dist/easypanel_1.0.0_all.deb
+```
+
+Or:
+
+```bash
+sudo apt install -y dist/easypanel_1.0.0_all.deb
+```
+
+## Verification
+
+After installation:
+
+```bash
+sudo easypanel
+```
+
+---
+
+**Fix Applied:** Current Session
+**Status:** ✅ Ready for use
+**Build Status:** Should now work without directory errors

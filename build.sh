@@ -23,17 +23,19 @@ mkdir -p "$OUTPUT_DIR"
 # Copy scripts to debian package structure
 echo "Preparing package files..."
 
+# Create necessary directories
+mkdir -p "$SCRIPT_DIR/debian/usr/local/bin"
+mkdir -p "$SCRIPT_DIR/debian/usr/local/lib/easypanel/modules"
+
 # Copy main script
 cp "$SCRIPT_DIR/src/main.sh" "$SCRIPT_DIR/debian/usr/local/bin/easypanel-bin"
 chmod 755 "$SCRIPT_DIR/debian/usr/local/bin/easypanel-bin"
 
 # Copy library script
-mkdir -p "$SCRIPT_DIR/debian/usr/local/lib/easypanel"
 cp "$SCRIPT_DIR/lib/utils.sh" "$SCRIPT_DIR/debian/usr/local/lib/easypanel/"
 chmod 755 "$SCRIPT_DIR/debian/usr/local/lib/easypanel/"*.sh
 
 # Copy module scripts
-mkdir -p "$SCRIPT_DIR/debian/usr/local/lib/easypanel/modules"
 for script in "$SCRIPT_DIR/src"/*.sh; do
     if [ "$(basename "$script")" != "main.sh" ]; then
         cp "$script" "$SCRIPT_DIR/debian/usr/local/lib/easypanel/modules/"
