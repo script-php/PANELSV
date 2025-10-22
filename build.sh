@@ -19,6 +19,7 @@ echo ""
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
+chmod 755 "$OUTPUT_DIR"
 
 # Copy scripts to debian package structure
 echo "Preparing package files..."
@@ -48,6 +49,11 @@ chmod 755 "$SCRIPT_DIR/debian/DEBIAN/preinst"
 chmod 755 "$SCRIPT_DIR/debian/DEBIAN/postinst"
 chmod 755 "$SCRIPT_DIR/debian/DEBIAN/postrm"
 
+# Ensure proper permissions on debian directories
+find "$SCRIPT_DIR/debian" -type d -exec chmod 755 {} \;
+find "$SCRIPT_DIR/debian" -type f ! -path '*/DEBIAN/*' -exec chmod 644 {} \;
+find "$SCRIPT_DIR/debian/DEBIAN" -type f -exec chmod 755 {} \;
+
 # Create md5sums file
 echo "Creating md5sums..."
 cd "$SCRIPT_DIR/debian"
@@ -62,6 +68,9 @@ PACKAGE_FILE="$OUTPUT_DIR/${PACKAGE_NAME}_${PROJECT_VERSION}_all.deb"
 dpkg-deb --build "$SCRIPT_DIR/debian" "$PACKAGE_FILE" 2>/dev/null
 
 if [ -f "$PACKAGE_FILE" ]; then
+    # Set proper permissions on the .deb file so apt can access it
+    chmod 644 "$PACKAGE_FILE"
+    
     echo ""
     echo "✓ Package built successfully!"
     echo "  Output: $PACKAGE_FILE"
