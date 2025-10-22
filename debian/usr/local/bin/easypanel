@@ -1,0 +1,34 @@
+#!/bin/bash
+
+################################################################################
+# EasyPanel - Main Entry Point Wrapper
+# Sources all necessary libraries and launches the main application
+################################################################################
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Set up library path
+export EASYPANEL_LIB_DIR="${SCRIPT_DIR}/../lib"
+export EASYPANEL_MODULES_DIR="${SCRIPT_DIR}/../lib/easypanel/modules"
+
+# Check if library exists
+if [ ! -f "$EASYPANEL_LIB_DIR/utils.sh" ]; then
+    echo "Error: Cannot find utils.sh library at $EASYPANEL_LIB_DIR/utils.sh"
+    echo "EasyPanel may not be installed correctly."
+    exit 1
+fi
+
+# Source the utility library
+source "$EASYPANEL_LIB_DIR/utils.sh"
+
+# Check if main script exists
+MAIN_SCRIPT="$SCRIPT_DIR/easypanel-bin"
+if [ ! -f "$MAIN_SCRIPT" ]; then
+    echo "Error: Cannot find main script at $MAIN_SCRIPT"
+    echo "EasyPanel may not be installed correctly."
+    exit 1
+fi
+
+# Run the main application
+exec bash "$MAIN_SCRIPT" "$@"

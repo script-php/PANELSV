@@ -32,6 +32,13 @@ mkdir -p "$SCRIPT_DIR/debian/usr/local/lib/easypanel/modules"
 cp "$SCRIPT_DIR/src/main.sh" "$SCRIPT_DIR/debian/usr/local/bin/easypanel-bin"
 chmod 755 "$SCRIPT_DIR/debian/usr/local/bin/easypanel-bin"
 
+# Copy wrapper script
+if [ -f "$SCRIPT_DIR/debian/usr/local/bin/easypanel" ]; then
+    chmod 755 "$SCRIPT_DIR/debian/usr/local/bin/easypanel"
+else
+    echo "Warning: easypanel wrapper not found at $SCRIPT_DIR/debian/usr/local/bin/easypanel"
+fi
+
 # Copy library script
 cp "$SCRIPT_DIR/lib/utils.sh" "$SCRIPT_DIR/debian/usr/local/lib/easypanel/"
 chmod 755 "$SCRIPT_DIR/debian/usr/local/lib/easypanel/"*.sh

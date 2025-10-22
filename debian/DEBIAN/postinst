@@ -31,10 +31,14 @@ EOF
     chmod 600 /etc/easypanel/config
 fi
 
-# Create symlink for easy access
-if [ ! -L /usr/local/bin/easypanel ]; then
-    ln -s /usr/local/bin/easypanel-bin /usr/local/bin/easypanel
-fi
+# Ensure library directories exist
+mkdir -p /usr/local/lib/easypanel/modules
+
+# Make sure wrapper script is executable
+chmod 755 /usr/local/bin/easypanel
+chmod 755 /usr/local/bin/easypanel-bin
+chmod 755 /usr/local/lib/easypanel/utils.sh
+find /usr/local/lib/easypanel/modules -type f -name "*.sh" -exec chmod 755 {} \;
 
 # Initialize logging
 touch /var/log/easypanel.log
