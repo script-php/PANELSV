@@ -77,6 +77,8 @@ dpkg-deb --build "$SCRIPT_DIR/debian" "$PACKAGE_FILE" 2>/dev/null
 if [ -f "$PACKAGE_FILE" ]; then
     # Set proper permissions on the .deb file so apt can access it
     chmod 644 "$PACKAGE_FILE"
+    # Make dist directory readable by all users
+    chmod 755 "$OUTPUT_DIR"
     
     echo ""
     echo "✓ Package built successfully!"
