@@ -9,21 +9,43 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PANEL_VERSION="1.0.0"
 
+# Determine library path (installed or development)
+if [ -f "/usr/local/lib/easypanel/utils.sh" ]; then
+    # Installed system-wide
+    LIB_PATH="/usr/local/lib/easypanel/utils.sh"
+    MODULES_DIR="/usr/local/lib/easypanel/modules"
+elif [ -f "${SCRIPT_DIR}/../lib/utils.sh" ]; then
+    # Development/local mode
+    LIB_PATH="${SCRIPT_DIR}/../lib/utils.sh"
+    MODULES_DIR="${SCRIPT_DIR}"
+else
+    echo "Error: Cannot find utility functions"
+    exit 1
+fi
+
 # Source utilities
-source "${SCRIPT_DIR}/../lib/utils.sh" || {
-    echo "Error: Cannot source utility functions"
+source "$LIB_PATH" || {
+    echo "Error: Cannot source utility functions from $LIB_PATH"
     exit 1
 }
 
 # Source scripts
 source_script() {
     local script="$1"
-    if [ -f "${SCRIPT_DIR}/${script}" ]; then
-        source "${SCRIPT_DIR}/${script}"
+    local script_path=""
+    
+    # Try installed location first
+    if [ -f "/usr/local/lib/easypanel/modules/$script" ]; then
+        script_path="/usr/local/lib/easypanel/modules/$script"
+    # Then try local directory
+    elif [ -f "${SCRIPT_DIR}/${script}" ]; then
+        script_path="${SCRIPT_DIR}/${script}"
     else
         print_error "Script not found: $script"
         return 1
     fi
+    
+    source "$script_path"
 }
 
 ################################################################################
