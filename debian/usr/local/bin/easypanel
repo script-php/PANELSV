@@ -5,27 +5,29 @@
 # Sources all necessary libraries and launches the main application
 ################################################################################
 
-# Set up library path (absolute paths)
-export EASYPANEL_LIB_DIR="/usr/local/lib/easypanel"
-export EASYPANEL_MODULES_DIR="/usr/local/lib/easypanel/modules"
+# Set up library paths (absolute paths)
+EASYPANEL_LIB_DIR="/usr/local/lib/easypanel"
+EASYPANEL_MODULES_DIR="/usr/local/lib/easypanel/modules"
+MAIN_SCRIPT="/usr/local/bin/easypanel-bin"
+
+# Export for subshells
+export EASYPANEL_LIB_DIR
+export EASYPANEL_MODULES_DIR
 
 # Check if library exists
 if [ ! -f "$EASYPANEL_LIB_DIR/utils.sh" ]; then
     echo "Error: Cannot find utils.sh library at $EASYPANEL_LIB_DIR/utils.sh"
-    echo "EasyPanel may not be installed correctly."
+    exit 1
+fi
+
+# Check if main script exists
+if [ ! -f "$MAIN_SCRIPT" ]; then
+    echo "Error: Cannot find main script at $MAIN_SCRIPT"
     exit 1
 fi
 
 # Source the utility library
-source "$EASYPANEL_LIB_DIR/utils.sh"
-
-# Check if main script exists
-MAIN_SCRIPT="/usr/local/bin/easypanel-bin"
-if [ ! -f "$MAIN_SCRIPT" ]; then
-    echo "Error: Cannot find main script at $MAIN_SCRIPT"
-    echo "EasyPanel may not be installed correctly."
-    exit 1
-fi
+. "$EASYPANEL_LIB_DIR/utils.sh"
 
 # Run the main application
 exec bash "$MAIN_SCRIPT" "$@"
