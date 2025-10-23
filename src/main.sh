@@ -95,49 +95,105 @@ show_main_menu() {
 
 # Install submenu
 submenu_install() {
-    source_script "install.sh" || return
+    if ! source_script "install.sh"; then
+        print_error "Failed to load install module"
+        return
+    fi
+    if ! type install_menu &>/dev/null; then
+        print_error "install_menu function not found"
+        return
+    fi
     install_menu
 }
 
 # Domains submenu
 submenu_domains() {
-    source_script "domains.sh" || return
+    if ! source_script "domains.sh"; then
+        print_error "Failed to load domains module"
+        return
+    fi
+    if ! type domains_menu &>/dev/null; then
+        print_error "domains_menu function not found"
+        return
+    fi
     domains_menu
 }
 
 # DNS submenu
 submenu_dns() {
-    source_script "dns.sh" || return
+    if ! source_script "dns.sh"; then
+        print_error "Failed to load dns module"
+        return
+    fi
+    if ! type dns_menu &>/dev/null; then
+        print_error "dns_menu function not found"
+        return
+    fi
     dns_menu
 }
 
 # Mail submenu
 submenu_mail() {
-    source_script "mail.sh" || return
+    if ! source_script "mail.sh"; then
+        print_error "Failed to load mail module"
+        return
+    fi
+    if ! type mail_menu &>/dev/null; then
+        print_error "mail_menu function not found"
+        return
+    fi
     mail_menu
 }
 
 # Databases submenu
 submenu_databases() {
-    source_script "databases.sh" || return
+    if ! source_script "databases.sh"; then
+        print_error "Failed to load databases module"
+        return
+    fi
+    if ! type databases_menu &>/dev/null; then
+        print_error "databases_menu function not found"
+        return
+    fi
     databases_menu
 }
 
 # Cron submenu
 submenu_cron() {
-    source_script "cron.sh" || return
+    if ! source_script "cron.sh"; then
+        print_error "Failed to load cron module"
+        return
+    fi
+    if ! type cron_menu &>/dev/null; then
+        print_error "cron_menu function not found"
+        return
+    fi
     cron_menu
 }
 
 # Backup submenu
 submenu_backup() {
-    source_script "backup.sh" || return
+    if ! source_script "backup.sh"; then
+        print_error "Failed to load backup module"
+        return
+    fi
+    if ! type backup_menu &>/dev/null; then
+        print_error "backup_menu function not found"
+        return
+    fi
     backup_menu
 }
 
 # Settings submenu
 submenu_settings() {
-    source_script "settings.sh" || return
+    if ! source_script "settings.sh"; then
+        print_error "Failed to load settings module"
+        return
+    fi
+    if ! type settings_menu &>/dev/null; then
+        print_error "settings_menu function not found"
+        return
+    fi
     settings_menu
 }
 
