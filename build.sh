@@ -109,6 +109,13 @@ if [ -f "$PACKAGE_FILE" ]; then
     echo "To run:"
     echo "  sudo easypanel"
     echo ""
+    # Copy package to /tmp for apt sandbox-safe installation
+    TMP_PKG="/tmp/$(basename "$PACKAGE_FILE")"
+    cp "$PACKAGE_FILE" "$TMP_PKG"
+    chown root:root "$TMP_PKG"
+    chmod 644 "$TMP_PKG"
+    echo "A copy of the package was saved to: $TMP_PKG"
+    echo "Install with: sudo apt install -y $TMP_PKG"
 else
     echo "✗ Failed to build package"
     exit 1
