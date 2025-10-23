@@ -26,8 +26,8 @@ if [ ! -f "$MAIN_SCRIPT" ]; then
     exit 1
 fi
 
-# Source the utility library
+# Source the utility library in this shell
 . "$EASYPANEL_LIB_DIR/utils.sh"
 
-# Run the main application
-exec bash "$MAIN_SCRIPT" "$@"
+# Source the main script in this shell (don't exec, just source)
+. "$MAIN_SCRIPT" "$@"
