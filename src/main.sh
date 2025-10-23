@@ -14,10 +14,12 @@ if [ -f "/usr/local/lib/easypanel/utils.sh" ]; then
     # Installed system-wide
     LIB_PATH="/usr/local/lib/easypanel/utils.sh"
     MODULES_DIR="/usr/local/lib/easypanel/modules"
-elif [ -f "${SCRIPT_DIR}/../lib/utils.sh" ]; then
-    # Development/local mode
+    SCRIPT_MODE="installed"
+elif [ -d "${SCRIPT_DIR}/../lib" ]; then
+    # Development/local mode (running from src/ directory)
     LIB_PATH="${SCRIPT_DIR}/../lib/utils.sh"
     MODULES_DIR="${SCRIPT_DIR}"
+    SCRIPT_MODE="development"
 else
     echo "Error: Cannot find utility functions"
     exit 1
