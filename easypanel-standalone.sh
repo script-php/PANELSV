@@ -819,6 +819,103 @@ delete_domain() {
     pause_menu
 }
 
+show_domain_info() {
+    local domain="$1"
+    
+    print_header "Domain Information: $domain"
+    
+    echo -e "${BOLD}Path:${NC}"
+    echo "  $WEBSITES_ROOT/$domain"
+    echo ""
+    
+    echo -e "${BOLD}Subdirectories:${NC}"
+    echo "  • htdocs (website files)"
+    echo "  • config (custom server configuration)"
+    echo "  • logs (access and error logs)"
+    echo "  • certificates (SSL certificates)"
+    echo ""
+    
+    echo -e "${BOLD}Web Server:${NC}"
+    local web_server=$(get_config "WEB_SERVER")
+    echo "  $web_server"
+    echo ""
+    
+    echo -e "${BOLD}SSL Certificate:${NC}"
+    if [ -f "/etc/letsencrypt/live/$domain/fullchain.pem" ]; then
+        echo -e "  ${GREEN}✓ Installed${NC}"
+        local expiry=$(openssl x509 -in "/etc/letsencrypt/live/$domain/fullchain.pem" -noout -enddate 2>/dev/null | cut -d= -f2)
+        echo "  Expires: $expiry"
+    else
+        echo -e "  ${RED}✗ Not installed${NC}"
+    fi
+    echo ""
+    
+    pause_menu
+}
+
+edit_domain() {
+    print_header "Edit Domain"
+    
+    local domains=($(list_domains))
+    
+    if [ ${#domains[@]} -eq 0 ]; then
+        print_info "No domains to edit"
+        pause_menu
+        return
+    fi
+    
+    echo "Select domain to edit:"
+    echo ""
+    
+    for i in "${!domains[@]}"; do
+        echo -e "  ${CYAN}$((i+1)))${NC} ${domains[$i]}"
+    done
+    
+    echo ""
+    read -p "Enter selection [1-${#domains[@]}]: " selection
+    
+    if [[ ! $selection =~ ^[0-9]+$ ]] || [ $selection -lt 1 ] || [ $selection -gt ${#domains[@]} ]; then
+        print_error "Invalid selection"
+        pause_menu
+        return
+    fi
+    
+    local domain="${domains[$((selection-1))]}"
+    
+    print_header "Edit Domain: $domain"
+    
+    echo -e "  ${CYAN}1)${NC} View domain info"
+    echo -e "  ${CYAN}2)${NC} Renew SSL certificate"
+    echo -e "  ${CYAN}3)${NC} View error log"
+    echo -e "  ${CYAN}4)${NC} View access log"
+    echo -e "  ${CYAN}0)${NC} Back"
+    echo ""
+    
+    read -p "Select option: " choice
+    
+    case "$choice" in
+        1) show_domain_info "$domain" ;;
+        2) renew_ssl_certificate "$domain" ;;
+        3) ${EDITOR:-less} "$WEBSITES_ROOT/$domain/logs/error.log" ;;
+        4) ${EDITOR:-less} "$WEBSITES_ROOT/$domain/logs/access.log" ;;
+        0) return ;;
+    esac
+}
+
+renew_ssl_certificate() {
+    local domain="$1"
+    
+    print_info "Renewing SSL certificate for $domain..."
+    
+    if certbot renew --cert-name "$domain" --non-interactive 2>/dev/null; then
+        copy_ssl_certificates_local "$domain"
+        print_success "SSL certificate renewed for $domain"
+    else
+        print_error "Failed to renew SSL certificate"
+        return 1
+    fi
+}
+
 ################################################################################
 # DNS MANAGEMENT
 ################################################################################
@@ -832,6 +929,237 @@ init_dns() {
     mkdir -p "$BIND_ZONES_DIR"
     chown -R bind:bind "$BIND_ZONES_DIR"
     chmod -R 755 "$BIND_ZONES_DIR"
+}
+
+list_dns_zones() {
+    if [ ! -d "$BIND_ZONES_DIR" ]; then
+        return
+    fi
+    
+    ls -1 "$BIND_ZONES_DIR"/db.* 2>/dev/null | xargs -n 1 basename | sed 's/db\.//'
+}
+
+list_dns_records() {
+    print_header "List DNS Records"
+    
+    local zones=($(list_dns_zones))
+    
+    if [ ${#zones[@]} -eq 0 ]; then
+        print_info "No DNS zones configured"
+        pause_menu
+        return
+    fi
+    
+    echo "Select zone to view:"
+    echo ""
+    
+    for i in "${!zones[@]}"; do
+        echo -e "  ${CYAN}$((i+1)))${NC} ${zones[$i]}"
+    done
+    
+    echo ""
+    read -p "Enter selection [1-${#zones[@]}]: " selection
+    
+    if [[ ! $selection =~ ^[0-9]+$ ]] || [ $selection -lt 1 ] || [ $selection -gt ${#zones[@]} ]; then
+        print_error "Invalid selection"
+        pause_menu
+        return
+    fi
+    
+    local zone="${zones[$((selection-1))]}"
+    local zone_file="$BIND_ZONES_DIR/db.$zone"
+    
+    if [ ! -f "$zone_file" ]; then
+        print_error "Zone file not found"
+        pause_menu
+        return
+    fi
+    
+    print_header "DNS Records for $zone"
+    cat "$zone_file"
+    echo ""
+    pause_menu
+}
+
+add_dns_record() {
+    print_header "Add DNS Record"
+    
+    local zones=($(list_dns_zones))
+    
+    if [ ${#zones[@]} -eq 0 ]; then
+        print_info "No DNS zones configured"
+        pause_menu
+        return
+    fi
+    
+    echo "Select zone:"
+    for i in "${!zones[@]}"; do
+        echo -e "  ${CYAN}$((i+1)))${NC} ${zones[$i]}"
+    done
+    
+    echo ""
+    read -p "Enter selection [1-${#zones[@]}]: " selection
+    
+    if [[ ! $selection =~ ^[0-9]+$ ]] || [ $selection -lt 1 ] || [ $selection -gt ${#zones[@]} ]; then
+        print_error "Invalid selection"
+        pause_menu
+        return
+    fi
+    
+    local zone="${zones[$((selection-1))]}"
+    local zone_file="$BIND_ZONES_DIR/db.$zone"
+    
+    echo ""
+    echo "Select record type:"
+    echo -e "  ${CYAN}1)${NC} A Record (IPv4)"
+    echo -e "  ${CYAN}2)${NC} CNAME Record"
+    echo -e "  ${CYAN}3)${NC} MX Record"
+    echo -e "  ${CYAN}4)${NC} TXT Record"
+    echo ""
+    
+    read -p "Select type [1-4]: " type_choice
+    
+    case "$type_choice" in
+        1)
+            local name=$(get_input "Enter record name (@ for root, or subdomain)" "@")
+            local ip=$(get_input "Enter IPv4 address")
+            if validate_ip "$ip"; then
+                echo "$name        IN  A      $ip" >> "$zone_file"
+                print_success "Added A record: $name -> $ip"
+            fi
+            ;;
+        2)
+            local name=$(get_input "Enter CNAME name")
+            local target=$(get_input "Enter target domain")
+            echo "$name        IN  CNAME  $target." >> "$zone_file"
+            print_success "Added CNAME record: $name -> $target"
+            ;;
+        3)
+            local priority=$(get_input "Enter priority (10, 20, etc)" "10")
+            local mail_server=$(get_input "Enter mail server hostname")
+            echo "@        IN  MX $priority  $mail_server." >> "$zone_file"
+            print_success "Added MX record: priority $priority -> $mail_server"
+            ;;
+        4)
+            local name=$(get_input "Enter record name (@ for root)" "@")
+            local value=$(get_input "Enter TXT value")
+            echo "$name        IN  TXT    \"$value\"" >> "$zone_file"
+            print_success "Added TXT record: $name -> $value"
+            ;;
+    esac
+    
+    restart_service "bind9"
+    pause_menu
+}
+
+edit_dns_zone() {
+    print_header "Edit DNS Zone"
+    
+    local zones=($(list_dns_zones))
+    
+    if [ ${#zones[@]} -eq 0 ]; then
+        print_info "No DNS zones configured"
+        pause_menu
+        return
+    fi
+    
+    echo "Select zone to edit:"
+    for i in "${!zones[@]}"; do
+        echo -e "  ${CYAN}$((i+1)))${NC} ${zones[$i]}"
+    done
+    
+    echo ""
+    read -p "Enter selection [1-${#zones[@]}]: " selection
+    
+    if [[ ! $selection =~ ^[0-9]+$ ]] || [ $selection -lt 1 ] || [ $selection -gt ${#zones[@]} ]; then
+        print_error "Invalid selection"
+        pause_menu
+        return
+    fi
+    
+    local zone="${zones[$((selection-1))]}"
+    local zone_file="$BIND_ZONES_DIR/db.$zone"
+    
+    backup_file "$zone_file"
+    ${EDITOR:-nano} "$zone_file"
+    
+    if named-checkzone "$zone" "$zone_file" >/dev/null 2>&1; then
+        print_success "Zone file syntax is valid"
+        restart_service "bind9"
+        print_success "Zone updated and BIND reloaded"
+    else
+        print_error "Zone file syntax error"
+    fi
+    
+    pause_menu
+}
+
+delete_dns_zone() {
+    print_header "Delete DNS Zone"
+    
+    local zones=($(list_dns_zones))
+    
+    if [ ${#zones[@]} -eq 0 ]; then
+        print_info "No DNS zones configured"
+        pause_menu
+        return
+    fi
+    
+    echo "Select zone to delete:"
+    for i in "${!zones[@]}"; do
+        echo -e "  ${CYAN}$((i+1)))${NC} ${zones[$i]}"
+    done
+    
+    echo ""
+    read -p "Enter selection [1-${#zones[@]}]: " selection
+    
+    if [[ ! $selection =~ ^[0-9]+$ ]] || [ $selection -lt 1 ] || [ $selection -gt ${#zones[@]} ]; then
+        print_error "Invalid selection"
+        pause_menu
+        return
+    fi
+    
+    local zone="${zones[$((selection-1))]}"
+    
+    if prompt_yes_no "Delete DNS zone for $zone?"; then
+        rm -f "$BIND_ZONES_DIR/db.$zone"
+        sed -i "/^zone \"$zone\"/,/^}/d" "/etc/bind/named.conf.local"
+        restart_service "bind9"
+        print_success "DNS zone deleted for $zone"
+    fi
+    
+    pause_menu
+}
+
+check_dns_status() {
+    print_header "DNS Status"
+    
+    if service_running "bind9"; then
+        echo -e "${GREEN}✓ BIND9 Service${NC}: Running"
+    else
+        echo -e "${RED}✗ BIND9 Service${NC}: Stopped"
+    fi
+    
+    echo ""
+    echo -e "${BOLD}Configured Zones:${NC}"
+    
+    local zones=($(list_dns_zones))
+    
+    if [ ${#zones[@]} -eq 0 ]; then
+        echo "  No zones configured"
+    else
+        for zone in "${zones[@]}"; do
+            local zone_file="$BIND_ZONES_DIR/db.$zone"
+            if named-checkzone "$zone" "$zone_file" >/dev/null 2>&1; then
+                echo -e "  ${GREEN}✓${NC} $zone"
+            else
+                echo -e "  ${RED}✗${NC} $zone (Invalid syntax)"
+            fi
+        done
+    fi
+    
+    echo ""
+    pause_menu
 }
 
 create_dns_zone() {
@@ -959,6 +1287,145 @@ add_mail_account() {
     pause_menu
 }
 
+list_mail_accounts() {
+    print_header "Mail Accounts"
+    
+    if [ ! -d "$MAIL_USERS_DIR" ]; then
+        print_info "No mail accounts configured"
+        pause_menu
+        return
+    fi
+    
+    local accounts=$(ls -d "$MAIL_USERS_DIR"/*/ 2>/dev/null | xargs -n 1 basename)
+    
+    if [ -z "$accounts" ]; then
+        print_info "No mail accounts configured"
+        pause_menu
+        return
+    fi
+    
+    echo -e "${BOLD}Configured Mail Accounts:${NC}"
+    echo ""
+    
+    echo "$accounts" | while read account; do
+        echo -e "  ${CYAN}•${NC} $account"
+        
+        local mailbox="$MAIL_USERS_DIR/$account/Maildir"
+        if [ -d "$mailbox" ]; then
+            local size=$(du -sh "$mailbox" 2>/dev/null | cut -f1)
+            echo "      Size: $size"
+        fi
+        
+        echo ""
+    done
+    
+    pause_menu
+}
+
+edit_mail_account() {
+    print_header "Edit Mail Account"
+    
+    local accounts=$(ls -d "$MAIL_USERS_DIR"/*/ 2>/dev/null | xargs -n 1 basename)
+    
+    if [ -z "$accounts" ]; then
+        print_info "No mail accounts to edit"
+        pause_menu
+        return
+    fi
+    
+    local -a account_list=($accounts)
+    
+    echo "Select account to edit:"
+    echo ""
+    
+    for i in "${!account_list[@]}"; do
+        echo -e "  ${CYAN}$((i+1)))${NC} ${account_list[$i]}"
+    done
+    
+    echo ""
+    read -p "Enter selection [1-${#account_list[@]}]: " selection
+    
+    if [[ ! $selection =~ ^[0-9]+$ ]] || [ $selection -lt 1 ] || [ $selection -gt ${#account_list[@]} ]; then
+        print_error "Invalid selection"
+        pause_menu
+        return
+    fi
+    
+    local email="${account_list[$((selection-1))]}"
+    
+    print_header "Edit Account: $email"
+    
+    echo -e "  ${CYAN}1)${NC} View account info"
+    echo -e "  ${CYAN}0)${NC} Back"
+    echo ""
+    
+    read -p "Select option: " choice
+    
+    case "$choice" in
+        1) show_mail_account_info "$email" ;;
+        0) return ;;
+    esac
+}
+
+show_mail_account_info() {
+    local email="$1"
+    
+    print_header "Mail Account Information"
+    
+    echo -e "${BOLD}Email:${NC}"
+    echo "  $email"
+    echo ""
+    
+    echo -e "${BOLD}Mailbox Path:${NC}"
+    echo "  $MAIL_USERS_DIR/$email/Maildir"
+    echo ""
+    
+    echo -e "${BOLD}Mailbox Size:${NC}"
+    local size=$(du -sh "$MAIL_USERS_DIR/$email/Maildir" 2>/dev/null | cut -f1)
+    echo "  $size"
+    echo ""
+    
+    pause_menu
+}
+
+delete_mail_account() {
+    print_header "Delete Mail Account"
+    
+    local accounts=$(ls -d "$MAIL_USERS_DIR"/*/ 2>/dev/null | xargs -n 1 basename)
+    
+    if [ -z "$accounts" ]; then
+        print_info "No mail accounts to delete"
+        pause_menu
+        return
+    fi
+    
+    local -a account_list=($accounts)
+    
+    echo "Select account to delete:"
+    for i in "${!account_list[@]}"; do
+        echo -e "  ${CYAN}$((i+1)))${NC} ${account_list[$i]}"
+    done
+    
+    echo ""
+    read -p "Enter selection [1-${#account_list[@]}]: " selection
+    
+    if [[ ! $selection =~ ^[0-9]+$ ]] || [ $selection -lt 1 ] || [ $selection -gt ${#account_list[@]} ]; then
+        print_error "Invalid selection"
+        pause_menu
+        return
+    fi
+    
+    local email="${account_list[$((selection-1))]}"
+    
+    print_warning "This will permanently delete the mail account: $email"
+    if prompt_yes_no "Continue?"; then
+        rm -rf "$MAIL_USERS_DIR/$email"
+        print_success "Mail account deleted: $email"
+    fi
+    
+    pause_menu
+}
+
 ################################################################################
 # DATABASE MANAGEMENT
 ################################################################################
@@ -1030,8 +1497,275 @@ create_database() {
     
     if $db_cmd -u root -proot -e "CREATE DATABASE \`$db_name\` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;" 2>/dev/null; then
         print_success "Database created: $db_name"
+        
+        if prompt_yes_no "Create database user for this database?"; then
+            local username=$(get_input "Database username" "${db_name}_user")
+            local password
+            read -sp "Database password: " password
+            echo ""
+            
+            if $db_cmd -u root -proot -e "CREATE USER '$username'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null; then
+                $db_cmd -u root -proot -e "GRANT ALL PRIVILEGES ON \`$db_name\`.* TO '$username'@'localhost';" 2>/dev/null
+                $db_cmd -u root -proot -e "FLUSH PRIVILEGES;" 2>/dev/null
+                print_success "Database user created: $username"
+            fi
+        fi
     else
         print_error "Failed to create database"
+    fi
+    
+    pause_menu
+}
+
+add_database_user() {
+    print_header "Add Database User"
+    
+    if ! check_db_connection; then
+        print_error "Cannot connect to database server"
+        pause_menu
+        return
+    fi
+    
+    local username=$(get_input "Username")
+    local password
+    read -sp "Password: " password
+    echo ""
+    
+    local db_cmd=$(get_db_command)
+    
+    if $db_cmd -u root -proot -e "CREATE USER '$username'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null; then
+        if prompt_yes_no "Grant all privileges?"; then
+            $db_cmd -u root -proot -e "GRANT ALL PRIVILEGES ON *.* TO '$username'@'localhost';" 2>/dev/null
+        fi
+        $db_cmd -u root -proot -e "FLUSH PRIVILEGES;" 2>/dev/null
+        print_success "Database user created: $username"
+    else
+        print_error "Failed to create user"
+    fi
+    
+    pause_menu
+}
+
+edit_database() {
+    print_header "Edit Database"
+    
+    if ! check_db_connection; then
+        print_error "Cannot connect to database server"
+        pause_menu
+        return
+    fi
+    
+    local db_cmd=$(get_db_command)
+    
+    local -a databases
+    while IFS= read -r db; do
+        if [[ ! "$db" =~ ^(information_schema|mysql|performance_schema|sys)$ ]]; then
+            databases+=("$db")
+        fi
+    done < <($db_cmd -u root -proot -e "SHOW DATABASES;" 2>/dev/null | tail -n +2)
+    
+    if [ ${#databases[@]} -eq 0 ]; then
+        print_info "No user databases found"
+        pause_menu
+        return
+    fi
+    
+    echo "Select database:"
+    for i in "${!databases[@]}"; do
+        echo -e "  ${CYAN}$((i+1)))${NC} ${databases[$i]}"
+    done
+    
+    echo ""
+    read -p "Enter selection [1-${#databases[@]}]: " selection
+    
+    if [[ ! $selection =~ ^[0-9]+$ ]] || [ $selection -lt 1 ] || [ $selection -gt ${#databases[@]} ]; then
+        print_error "Invalid selection"
+        pause_menu
+        return
+    fi
+    
+    local database="${databases[$((selection-1))]}"
+    show_database_info "$database"
+}
+
+show_database_info() {
+    local database="$1"
+    local db_cmd=$(get_db_command)
+    
+    print_header "Database Information: $database"
+    
+    echo -e "${BOLD}Database Name:${NC}"
+    echo "  $database"
+    echo ""
+    
+    echo -e "${BOLD}Size:${NC}"
+    local size=$($db_cmd -u root -proot -e "SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) FROM information_schema.TABLES WHERE table_schema = '$database';" 2>/dev/null | tail -1)
+    echo "  ${size}MB"
+    echo ""
+    
+    echo -e "${BOLD}Tables:${NC}"
+    $db_cmd -u root -proot -e "SELECT TABLE_NAME FROM information_schema.TABLES WHERE table_schema = '$database';" 2>/dev/null | tail -n +2 | while read table; do
+        echo "  • $table"
+    done
+    echo ""
+    
+    pause_menu
+}
+
+delete_database() {
+    print_header "Delete Database"
+    
+    if ! check_db_connection; then
+        print_error "Cannot connect to database server"
+        pause_menu
+        return
+    fi
+    
+    local db_cmd=$(get_db_command)
+    
+    local -a databases
+    while IFS= read -r db; do
+        if [[ ! "$db" =~ ^(information_schema|mysql|performance_schema|sys)$ ]]; then
+            databases+=("$db")
+        fi
+    done < <($db_cmd -u root -proot -e "SHOW DATABASES;" 2>/dev/null | tail -n +2)
+    
+    if [ ${#databases[@]} -eq 0 ]; then
+        print_info "No user databases found"
+        pause_menu
+        return
+    fi
+    
+    echo "Select database to delete:"
+    for i in "${!databases[@]}"; do
+        echo -e "  ${CYAN}$((i+1)))${NC} ${databases[$i]}"
+    done
+    
+    echo ""
+    read -p "Enter selection [1-${#databases[@]}]: " selection
+    
+    if [[ ! $selection =~ ^[0-9]+$ ]] || [ $selection -lt 1 ] || [ $selection -gt ${#databases[@]} ]; then
+        print_error "Invalid selection"
+        pause_menu
+        return
+    fi
+    
+    local database="${databases[$((selection-1))]}"
+    
+    print_warning "This will permanently delete: $database"
+    
+    if prompt_yes_no "Delete database $database?"; then
+        if $db_cmd -u root -proot -e "DROP DATABASE \`$database\`;" 2>/dev/null; then
+            print_success "Database deleted: $database"
+        else
+            print_error "Failed to delete database"
+        fi
+    fi
+    
+    pause_menu
+}
+
+edit_database_user() {
+    print_header "Edit Database User"
+    
+    if ! check_db_connection; then
+        print_error "Cannot connect to database server"
+        pause_menu
+        return
+    fi
+    
+    local db_cmd=$(get_db_command)
+    
+    local -a users
+    while IFS= read -r user; do
+        users+=("$user")
+    done < <($db_cmd -u root -proot -e "SELECT CONCAT(user,'@',host) FROM mysql.user WHERE user NOT IN ('root', 'mysql.sys', 'mysql.session');" 2>/dev/null | tail -n +2)
+    
+    if [ ${#users[@]} -eq 0 ]; then
+        print_info "No user accounts found"
+        pause_menu
+        return
+    fi
+    
+    echo "Select user:"
+    for i in "${!users[@]}"; do
+        echo -e "  ${CYAN}$((i+1)))${NC} ${users[$i]}"
+    done
+    
+    echo ""
+    read -p "Enter selection [1-${#users[@]}]: " selection
+    
+    if [[ ! $selection =~ ^[0-9]+$ ]] || [ $selection -lt 1 ] || [ $selection -gt ${#users[@]} ]; then
+        print_error "Invalid selection"
+        pause_menu
+        return
+    fi
+    
+    local user="${users[$((selection-1))]}"
+    local username="${user%%@*}"
+    local host="${user##*@}"
+    
+    local new_password
+    read -sp "New password: " new_password
+    echo ""
+    
+    if $db_cmd -u root -proot -e "ALTER USER '$username'@'$host' IDENTIFIED BY '$new_password';" 2>/dev/null; then
+        $db_cmd -u root -proot -e "FLUSH PRIVILEGES;" 2>/dev/null
+        print_success "Password changed for $user"
+    else
+        print_error "Failed to change password"
+    fi
+    
+    pause_menu
+}
+
+delete_database_user() {
+    print_header "Delete Database User"
+    
+    if ! check_db_connection; then
+        print_error "Cannot connect to database server"
+        pause_menu
+        return
+    fi
+    
+    local db_cmd=$(get_db_command)
+    
+    local -a users
+    while IFS= read -r user; do
+        users+=("$user")
+    done < <($db_cmd -u root -proot -e "SELECT CONCAT(user,'@',host) FROM mysql.user WHERE user NOT IN ('root', 'mysql.sys', 'mysql.session');" 2>/dev/null | tail -n +2)
+    
+    if [ ${#users[@]} -eq 0 ]; then
+        print_info "No user accounts found"
+        pause_menu
+        return
+    fi
+    
+    echo "Select user to delete:"
+    for i in "${!users[@]}"; do
+        echo -e "  ${CYAN}$((i+1)))${NC} ${users[$i]}"
+    done
+    
+    echo ""
+    read -p "Enter selection [1-${#users[@]}]: " selection
+    
+    if [[ ! $selection =~ ^[0-9]+$ ]] || [ $selection -lt 1 ] || [ $selection -gt ${#users[@]} ]; then
+        print_error "Invalid selection"
+        pause_menu
+        return
+    fi
+    
+    local user="${users[$((selection-1))]}"
+    local username="${user%%@*}"
+    local host="${user##*@}"
+    
+    if prompt_yes_no "Delete user $user?"; then
+        if $db_cmd -u root -proot -e "DROP USER '$username'@'$host';" 2>/dev/null; then
+            $db_cmd -u root -proot -e "FLUSH PRIVILEGES;" 2>/dev/null
+            print_success "User deleted: $user"
+        else
+            print_error "Failed to delete user"
+        fi
     fi
     
     pause_menu
@@ -1125,6 +1859,129 @@ list_backups() {
     pause_menu
 }
 
+backup_full_system() {
+    print_header "Full System Backup"
+    
+    print_warning "This will create a complete backup of all websites and databases"
+    if ! prompt_yes_no "Continue?"; then
+        return
+    fi
+    
+    local backup_dir="$BACKUP_ROOT/full"
+    mkdir -p "$backup_dir"
+    local backup_file="$backup_dir/full_system_$(date +%Y%m%d_%H%M%S).tar.gz"
+    
+    print_info "Creating full system backup (this may take significant time)..."
+    
+    print_info "Backing up websites..."
+    tar -czf "$backup_file.websites" /root/websites 2>/dev/null || print_warning "Website backup failed"
+    
+    print_info "Backing up databases..."
+    local db_cmd=$(get_db_command)
+    $db_cmd -u root -proot --all-databases 2>/dev/null | gzip > "$backup_dir/databases_$(date +%Y%m%d_%H%M%S).sql.gz" || print_warning "Database backup failed"
+    
+    local size=$(du -sh "$backup_dir" 2>/dev/null | cut -f1)
+    print_success "Full system backup completed in $backup_dir ($size)"
+    
+    pause_menu
+}
+
+restore_backup() {
+    print_header "Restore Backup"
+    
+    local -a backup_files
+    while IFS= read -r file; do
+        backup_files+=("$file")
+    done < <(find "$BACKUP_ROOT" -type f \( -name "*.tar.gz" -o -name "*.sql.gz" \) 2>/dev/null | sort -r)
+    
+    if [ ${#backup_files[@]} -eq 0 ]; then
+        print_info "No backups found"
+        pause_menu
+        return
+    fi
+    
+    echo "Available backups:"
+    echo ""
+    
+    for i in "${!backup_files[@]}"; do
+        local size=$(du -h "${backup_files[$i]}" | cut -f1)
+        local name=$(basename "${backup_files[$i]}")
+        echo -e "  ${CYAN}$((i+1)))${NC} $name ($size)"
+    done
+    
+    echo ""
+    read -p "Select backup to restore [1-${#backup_files[@]}]: " selection
+    
+    if [[ ! $selection =~ ^[0-9]+$ ]] || [ $selection -lt 1 ] || [ $selection -gt ${#backup_files[@]} ]; then
+        print_error "Invalid selection"
+        pause_menu
+        return
+    fi
+    
+    local backup_file="${backup_files[$((selection-1))]}"
+    local filename=$(basename "$backup_file")
+    
+    print_warning "This will restore from backup: $filename"
+    if ! prompt_yes_no "Continue?"; then
+        return
+    fi
+    
+    print_info "Restoring backup (this may take a while)..."
+    
+    case "$filename" in
+        *.tar.gz)
+            if tar -xzf "$backup_file" -C / 2>/dev/null; then
+                print_success "Backup restored successfully"
+            else
+                print_error "Failed to restore backup"
+            fi
+            ;;
+        *.sql.gz)
+            local temp_sql="/tmp/restore_db.sql"
+            gunzip -c "$backup_file" > "$temp_sql"
+            
+            local db_cmd=$(get_db_command)
+            if $db_cmd -u root -proot < "$temp_sql" 2>/dev/null; then
+                print_success "Database backup restored successfully"
+                rm -f "$temp_sql"
+            else
+                print_error "Failed to restore database backup"
+            fi
+            ;;
+    esac
+    
+    pause_menu
+}
+
+cleanup_old_backups() {
+    print_header "Cleanup Old Backups"
+    
+    echo "Delete backups older than:"
+    echo -e "  ${CYAN}1)${NC} 7 days"
+    echo -e "  ${CYAN}2)${NC} 14 days"
+    echo -e "  ${CYAN}3)${NC} 30 days"
+    echo ""
+    
+    read -p "Select option [1-3]: " choice
+    
+    local days
+    case "$choice" in
+        1) days=7 ;;
+        2) days=14 ;;
+        3) days=30 ;;
+        *)
+            print_error "Invalid choice"
+            pause_menu
+            return
+            ;;
+    esac
+    
+    print_info "Deleting backups older than $days days..."
+    find "$BACKUP_ROOT" -type f -mtime +$days -delete
+    print_success "Old backups cleaned up"
+    pause_menu
+}
+
 ################################################################################
 # CRON MANAGEMENT
 ################################################################################
@@ -1152,6 +2009,94 @@ list_cron_jobs() {
     fi
     
     echo ""
+    pause_menu
+}
+
+add_website_backup_cron() {
+    local hour=$(get_input "Hour for website backup (0-23)" "2")
+    local minute=$(get_input "Minute (0-59)" "0")
+    
+    local command="$minute $hour * * * tar -czf /root/backups/websites/backup_\$(date +\%Y\%m\%d).tar.gz /root/websites"
+    (crontab -u root -l 2>/dev/null; echo "$command") | crontab -u root - 2>/dev/null
+    print_success "Website backup scheduled for $hour:$minute"
+}
+
+add_database_backup_cron() {
+    local hour=$(get_input "Hour for database backup (0-23)" "3")
+    local minute=$(get_input "Minute (0-59)" "0")
+    
+    local db_cmd=$(get_db_command)
+    local command="$minute $hour * * * $db_cmd -u root -proot --all-databases 2>/dev/null | gzip > /root/backups/databases/backup_\$(date +\%Y\%m\%d).sql.gz"
+    (crontab -u root -l 2>/dev/null; echo "$command") | crontab -u root - 2>/dev/null
+    print_success "Database backup scheduled for $hour:$minute"
+}
+
+add_ssl_renewal_cron() {
+    local command="0 3 * * * certbot renew --non-interactive --quiet"
+    (crontab -u root -l 2>/dev/null; echo "$command") | crontab -u root - 2>/dev/null
+    print_success "SSL renewal scheduled for 3:00 AM daily"
+}
+
+add_custom_cron() {
+    print_header "Add Custom Cron Job"
+    
+    echo "Cron format: minute hour day month weekday command"
+    echo "Example: 0 2 * * * /home/user/backup.sh (daily at 2:00 AM)"
+    echo ""
+    
+    local schedule=$(get_input "Cron schedule")
+    local command=$(get_input "Command to execute")
+    local user=$(get_input "Run as user" "root")
+    
+    (crontab -u "$user" -l 2>/dev/null; echo "$schedule $command") | crontab -u "$user" - 2>/dev/null
+    
+    print_success "Custom cron job added"
+}
+
+edit_cron_job() {
+    print_header "Edit Cron Jobs"
+    
+    local user=$(get_input "Edit crontab for user" "root")
+    crontab -u "$user" -e
+}
+
+delete_cron_job() {
+    print_header "Delete Cron Job"
+    
+    local user=$(get_input "User to edit" "root")
+    
+    local -a jobs
+    while IFS= read -r line; do
+        jobs+=("$line")
+    done < <(crontab -u "$user" -l 2>/dev/null | grep -v "^#" | grep -v "^$")
+    
+    if [ ${#jobs[@]} -eq 0 ]; then
+        print_info "No cron jobs found for $user"
+        pause_menu
+        return
+    fi
+    
+    echo "Select cron job to delete:"
+    for i in "${!jobs[@]}"; do
+        echo -e "  ${CYAN}$((i+1)))${NC} ${jobs[$i]:0:60}..."
+    done
+    
+    echo ""
+    read -p "Enter selection [1-${#jobs[@]}]: " selection
+    
+    if [[ ! $selection =~ ^[0-9]+$ ]] || [ $selection -lt 1 ] || [ $selection -gt ${#jobs[@]} ]; then
+        print_error "Invalid selection"
+        pause_menu
+        return
+    fi
+    
+    local job_to_delete="${jobs[$((selection-1))]}"
+    
+    if prompt_yes_no "Delete this cron job?"; then
+        (crontab -u "$user" -l 2>/dev/null | grep -v "$job_to_delete") | crontab -u "$user" - 2>/dev/null
+        print_success "Cron job deleted"
+    fi
+    
     pause_menu
 }
 
@@ -1238,6 +2183,278 @@ show_configuration() {
     pause_menu
 }
 
+manage_services() {
+    print_header "Service Management"
+    
+    local -a installed_services
+    
+    local services=("nginx" "apache2" "mariadb" "mysql" "bind9" "postfix" "dovecot")
+    
+    for service in "${services[@]}"; do
+        if package_installed "$service"; then
+            installed_services+=("$service")
+        fi
+    done
+    
+    if [ ${#installed_services[@]} -eq 0 ]; then
+        print_info "No services installed"
+        pause_menu
+        return
+    fi
+    
+    echo "Select service to manage:"
+    echo ""
+    
+    for i in "${!installed_services[@]}"; do
+        local service="${installed_services[$i]}"
+        if service_running "$service"; then
+            echo -e "  ${CYAN}$((i+1)))${NC} $service ${GREEN}(Running)${NC}"
+        else
+            echo -e "  ${CYAN}$((i+1)))${NC} $service ${RED}(Stopped)${NC}"
+        fi
+    done
+    
+    echo ""
+    read -p "Enter selection [1-${#installed_services[@]}]: " selection
+    
+    if [[ ! $selection =~ ^[0-9]+$ ]] || [ $selection -lt 1 ] || [ $selection -gt ${#installed_services[@]} ]; then
+        print_error "Invalid selection"
+        pause_menu
+        return
+    fi
+    
+    local service="${installed_services[$((selection-1))]}"
+    
+    print_header "Manage Service: $service"
+    
+    echo -e "  ${CYAN}1)${NC} Start"
+    echo -e "  ${CYAN}2)${NC} Stop"
+    echo -e "  ${CYAN}3)${NC} Restart"
+    echo -e "  ${CYAN}4)${NC} Enable at startup"
+    echo -e "  ${CYAN}5)${NC} Disable at startup"
+    echo -e "  ${CYAN}0)${NC} Back"
+    echo ""
+    
+    read -p "Select action: " action
+    
+    case "$action" in
+        1) start_service "$service" ;;
+        2) stop_service "$service" ;;
+        3) restart_service "$service" ;;
+        4) enable_service "$service" ;;
+        5) disable_service "$service" ;;
+        0) return ;;
+    esac
+    
+    pause_menu
+}
+
+show_system_info() {
+    print_header "System Information"
+    
+    echo -e "${BOLD}Hostname:${NC}"
+    echo "  $(hostname)"
+    echo ""
+    
+    echo -e "${BOLD}Operating System:${NC}"
+    source /etc/os-release 2>/dev/null
+    echo "  $PRETTY_NAME"
+    echo ""
+    
+    echo -e "${BOLD}Kernel:${NC}"
+    echo "  $(uname -r)"
+    echo ""
+    
+    echo -e "${BOLD}CPU:${NC}"
+    echo "  $(grep -c ^processor /proc/cpuinfo) cores"
+    echo ""
+    
+    echo -e "${BOLD}Memory:${NC}"
+    local total_mem=$(free -h | grep Mem | awk '{print $2}')
+    local used_mem=$(free -h | grep Mem | awk '{print $3}')
+    echo "  Used: $used_mem / Total: $total_mem"
+    echo ""
+    
+    echo -e "${BOLD}Disk Usage:${NC}"
+    df -h / | tail -1 | awk '{printf "  Used: %s / Total: %s (%.0f%%)\n", $3, $2, $5}'
+    echo ""
+    
+    echo -e "${BOLD}Uptime:${NC}"
+    echo "  $(uptime -p)"
+    echo ""
+    
+    pause_menu
+}
+
+change_db_password() {
+    print_header "Change Database Root Password"
+    
+    local db_type=$(get_config "DATABASE" "mariadb-server")
+    
+    if ! service_running "$db_type"; then
+        print_error "Database service is not running"
+        pause_menu
+        return
+    fi
+    
+    print_warning "This will change the root password for $db_type"
+    
+    local new_password
+    read -sp "New root password: " new_password
+    echo ""
+    read -sp "Confirm password: " confirm_password
+    echo ""
+    
+    if [ "$new_password" != "$confirm_password" ]; then
+        print_error "Passwords do not match"
+        pause_menu
+        return
+    fi
+    
+    local db_cmd=$(get_db_command)
+    
+    if $db_cmd -u root -proot -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$new_password';" 2>/dev/null; then
+        print_success "Database root password changed"
+    else
+        print_error "Failed to change password"
+    fi
+    
+    pause_menu
+}
+
+configure_firewall() {
+    print_header "Firewall Configuration"
+    
+    if ! command_exists "ufw"; then
+        print_error "UFW firewall not installed"
+        if prompt_yes_no "Install UFW?"; then
+            apt-get install -y ufw >/dev/null 2>&1
+            ufw --force enable >/dev/null 2>&1
+            print_success "UFW installed and enabled"
+        fi
+        pause_menu
+        return
+    fi
+    
+    echo -e "  ${CYAN}1)${NC} View firewall status"
+    echo -e "  ${CYAN}2)${NC} Enable firewall"
+    echo -e "  ${CYAN}3)${NC} Disable firewall"
+    echo -e "  ${CYAN}4)${NC} Allow port"
+    echo -e "  ${CYAN}5)${NC} Deny port"
+    echo -e "  ${CYAN}0)${NC} Back"
+    echo ""
+    
+    read -p "Select option: " choice
+    
+    case "$choice" in
+        1)
+            print_header "Firewall Status"
+            ufw status
+            ;;
+        2)
+            ufw --force enable
+            print_success "Firewall enabled"
+            ;;
+        3)
+            ufw disable
+            print_success "Firewall disabled"
+            ;;
+        4)
+            local port=$(get_input "Enter port number")
+            ufw allow "$port"
+            print_success "Port $port allowed"
+            ;;
+        5)
+            local port=$(get_input "Enter port number")
+            ufw deny "$port"
+            print_success "Port $port denied"
+            ;;
+        0)
+            return
+            ;;
+    esac
+    
+    pause_menu
+}
+
+view_logs() {
+    print_header "View Logs"
+    
+    echo "Select log to view:"
+    echo ""
+    echo -e "  ${CYAN}1)${NC} EasyPanel logs"
+    echo -e "  ${CYAN}2)${NC} Web server error logs"
+    echo -e "  ${CYAN}3)${NC} System logs"
+    echo -e "  ${CYAN}0)${NC} Back"
+    echo ""
+    
+    read -p "Select option: " choice
+    
+    case "$choice" in
+        1)
+            ${EDITOR:-less} /var/log/easypanel.log
+            ;;
+        2)
+            local web_server=$(get_config "WEB_SERVER")
+            case "$web_server" in
+                apache2)
+                    ${EDITOR:-less} /var/log/apache2/error.log
+                    ;;
+                nginx)
+                    ${EDITOR:-less} /var/log/nginx/error.log
+                    ;;
+            esac
+            ;;
+        3)
+            ${EDITOR:-less} /var/log/syslog
+            ;;
+        0)
+            return
+            ;;
+    esac
+}
+
+security_settings() {
+    print_header "Security Settings"
+    
+    echo -e "  ${CYAN}1)${NC} Install fail2ban"
+    echo -e "  ${CYAN}2)${NC} System updates"
+    echo -e "  ${CYAN}3)${NC} View installed packages count"
+    echo -e "  ${CYAN}0)${NC} Back"
+    echo ""
+    
+    read -p "Select option: " choice
+    
+    case "$choice" in
+        1)
+            if command_exists "fail2ban-client"; then
+                print_info "fail2ban is already installed"
+            else
+                print_info "Installing fail2ban..."
+                apt-get install -y fail2ban >/dev/null 2>&1
+                enable_service "fail2ban"
+                print_success "fail2ban installed"
+            fi
+            ;;
+        2)
+            print_info "Checking for updates..."
+            apt-get update >/dev/null 2>&1
+            apt-get upgrade -y 2>&1 | tail -5
+            print_success "System updated"
+            ;;
+        3)
+            print_header "Installed Packages"
+            dpkg -l | grep "^ii" | wc -l
+            echo " packages installed"
+            ;;
+        0)
+            return
+            ;;
+    esac
+    
+    pause_menu
+}
+
 show_about() {
     print_header "About EasyPanel Standalone"
     
@@ -1314,16 +2531,18 @@ submenu_domains() {
         
         echo -e "  ${CYAN}1)${NC} List Domains"
         echo -e "  ${CYAN}2)${NC} Add Domain"
-        echo -e "  ${CYAN}3)${NC} Delete Domain"
+        echo -e "  ${CYAN}3)${NC} Edit Domain"
+        echo -e "  ${CYAN}4)${NC} Delete Domain"
         echo -e "  ${CYAN}0)${NC} Back"
         
         print_separator
-        read -p "Select option [0-3]: " choice
+        read -p "Select option [0-4]: " choice
         
         case "$choice" in
             1) list_domains_display ;;
             2) add_domain ;;
-            3) delete_domain ;;
+            3) edit_domain ;;
+            4) delete_domain ;;
             0) return ;;
             *)
                 print_error "Invalid option"
@@ -1339,21 +2558,24 @@ submenu_dns() {
     while true; do
         print_header "DNS Management"
         
-        echo -e "  ${CYAN}1)${NC} Create DNS Zone"
-        echo -e "  ${CYAN}2)${NC} DNS Status"
+        echo -e "  ${CYAN}1)${NC} List DNS Records"
+        echo -e "  ${CYAN}2)${NC} Create DNS Zone"
+        echo -e "  ${CYAN}3)${NC} Add DNS Record"
+        echo -e "  ${CYAN}4)${NC} Edit DNS Zone"
+        echo -e "  ${CYAN}5)${NC} Delete DNS Zone"
+        echo -e "  ${CYAN}6)${NC} DNS Status"
         echo -e "  ${CYAN}0)${NC} Back"
         
         print_separator
-        read -p "Select option [0-2]: " choice
+        read -p "Select option [0-6]: " choice
         
         case "$choice" in
-            1) create_dns_zone ;;
-            2)
-                print_header "DNS Status"
-                service_running "bind9" && echo -e "${GREEN}✓ BIND9${NC}: Running" || echo -e "${RED}✗ BIND9${NC}: Stopped"
-                echo ""
-                pause_menu
-                ;;
+            1) list_dns_records ;;
+            2) create_dns_zone ;;
+            3) add_dns_record ;;
+            4) edit_dns_zone ;;
+            5) delete_dns_zone ;;
+            6) check_dns_status ;;
             0) return ;;
             *)
                 print_error "Invalid option"
@@ -1369,22 +2591,22 @@ submenu_mail() {
     while true; do
         print_header "Mail Management"
         
-        echo -e "  ${CYAN}1)${NC} Add Mail Account"
-        echo -e "  ${CYAN}2)${NC} Mail Service Status"
+        echo -e "  ${CYAN}1)${NC} List Mail Accounts"
+        echo -e "  ${CYAN}2)${NC} Add Mail Account"
+        echo -e "  ${CYAN}3)${NC} Edit Mail Account"
+        echo -e "  ${CYAN}4)${NC} Show Mail Account Info"
+        echo -e "  ${CYAN}5)${NC} Delete Mail Account"
         echo -e "  ${CYAN}0)${NC} Back"
         
         print_separator
-        read -p "Select option [0-2]: " choice
+        read -p "Select option [0-5]: " choice
         
         case "$choice" in
-            1) add_mail_account ;;
-            2)
-                print_header "Mail Services Status"
-                service_running "postfix" && echo -e "${GREEN}✓ Postfix${NC}: Running" || echo -e "${RED}✗ Postfix${NC}: Stopped"
-                service_running "dovecot" && echo -e "${GREEN}✓ Dovecot${NC}: Running" || echo -e "${RED}✗ Dovecot${NC}: Stopped"
-                echo ""
-                pause_menu
-                ;;
+            1) list_mail_accounts ;;
+            2) add_mail_account ;;
+            3) edit_mail_account ;;
+            4) show_mail_account_info ;;
+            5) delete_mail_account ;;
             0) return ;;
             *)
                 print_error "Invalid option"
@@ -1400,21 +2622,38 @@ submenu_databases() {
         
         echo -e "  ${CYAN}1)${NC} List Databases"
         echo -e "  ${CYAN}2)${NC} Create Database"
-        echo -e "  ${CYAN}3)${NC} Database Service Status"
+        echo -e "  ${CYAN}3)${NC} Edit Database"
+        echo -e "  ${CYAN}4)${NC} Show Database Info"
+        echo -e "  ${CYAN}5)${NC} Delete Database"
+        echo -e "  ${CYAN}6)${NC} Database Users"
         echo -e "  ${CYAN}0)${NC} Back"
         
         print_separator
-        read -p "Select option [0-3]: " choice
+        read -p "Select option [0-6]: " choice
         
         case "$choice" in
             1) list_databases ;;
             2) create_database ;;
-            3)
-                print_header "Database Service Status"
-                local db_type=$(get_config "DATABASE" "mariadb-server")
-                service_running "$db_type" && echo -e "${GREEN}✓ $db_type${NC}: Running" || echo -e "${RED}✗ $db_type${NC}: Stopped"
-                echo ""
-                pause_menu
+            3) edit_database ;;
+            4) show_database_info ;;
+            5) delete_database ;;
+            6)
+                while true; do
+                    print_header "Database Users"
+                    echo -e "  ${CYAN}1)${NC} Add Database User"
+                    echo -e "  ${CYAN}2)${NC} Edit Database User"
+                    echo -e "  ${CYAN}3)${NC} Delete Database User"
+                    echo -e "  ${CYAN}0)${NC} Back"
+                    print_separator
+                    read -p "Select option [0-3]: " user_choice
+                    case "$user_choice" in
+                        1) add_database_user ;;
+                        2) edit_database_user ;;
+                        3) delete_database_user ;;
+                        0) break ;;
+                        *) print_error "Invalid option"; pause_menu ;;
+                    esac
+                done
                 ;;
             0) return ;;
             *)
@@ -1430,15 +2669,25 @@ submenu_cron() {
         print_header "Cron Job Management"
         
         echo -e "  ${CYAN}1)${NC} List Cron Jobs"
-        echo -e "  ${CYAN}2)${NC} Add Custom Cron Job"
+        echo -e "  ${CYAN}2)${NC} Add Website Backup Cron"
+        echo -e "  ${CYAN}3)${NC} Add Database Backup Cron"
+        echo -e "  ${CYAN}4)${NC} Add SSL Renewal Cron"
+        echo -e "  ${CYAN}5)${NC} Add Custom Cron Job"
+        echo -e "  ${CYAN}6)${NC} Edit Cron Job"
+        echo -e "  ${CYAN}7)${NC} Delete Cron Job"
         echo -e "  ${CYAN}0)${NC} Back"
         
         print_separator
-        read -p "Select option [0-2]: " choice
+        read -p "Select option [0-7]: " choice
         
         case "$choice" in
             1) list_cron_jobs ;;
-            2) add_custom_cron ;;
+            2) add_website_backup_cron ;;
+            3) add_database_backup_cron ;;
+            4) add_ssl_renewal_cron ;;
+            5) add_custom_cron ;;
+            6) edit_cron_job ;;
+            7) delete_cron_job ;;
             0) return ;;
             *)
                 print_error "Invalid option"
@@ -1456,16 +2705,22 @@ submenu_backup() {
         
         echo -e "  ${CYAN}1)${NC} Backup Websites"
         echo -e "  ${CYAN}2)${NC} Backup Databases"
-        echo -e "  ${CYAN}3)${NC} List Backups"
+        echo -e "  ${CYAN}3)${NC} Backup Full System"
+        echo -e "  ${CYAN}4)${NC} List Backups"
+        echo -e "  ${CYAN}5)${NC} Restore Backup"
+        echo -e "  ${CYAN}6)${NC} Cleanup Old Backups"
         echo -e "  ${CYAN}0)${NC} Back"
         
         print_separator
-        read -p "Select option [0-3]: " choice
+        read -p "Select option [0-6]: " choice
         
         case "$choice" in
             1) backup_websites ;;
             2) backup_databases ;;
-            3) list_backups ;;
+            3) backup_full_system ;;
+            4) list_backups ;;
+            5) restore_backup ;;
+            6) cleanup_old_backups ;;
             0) return ;;
             *)
                 print_error "Invalid option"
@@ -1480,17 +2735,29 @@ submenu_settings() {
         print_header "Settings"
         
         echo -e "  ${CYAN}1)${NC} Show Configuration"
-        echo -e "  ${CYAN}2)${NC} System Status"
-        echo -e "  ${CYAN}3)${NC} About EasyPanel"
+        echo -e "  ${CYAN}2)${NC} System Info"
+        echo -e "  ${CYAN}3)${NC} Manage Services"
+        echo -e "  ${CYAN}4)${NC} View Logs"
+        echo -e "  ${CYAN}5)${NC} Security Settings"
+        echo -e "  ${CYAN}6)${NC} Configure Firewall"
+        echo -e "  ${CYAN}7)${NC} Change Database Password"
+        echo -e "  ${CYAN}8)${NC} System Status"
+        echo -e "  ${CYAN}9)${NC} About EasyPanel"
         echo -e "  ${CYAN}0)${NC} Back"
         
         print_separator
-        read -p "Select option [0-3]: " choice
+        read -p "Select option [0-9]: " choice
         
         case "$choice" in
             1) show_configuration ;;
-            2) show_system_status ;;
-            3) show_about ;;
+            2) show_system_info ;;
+            3) manage_services ;;
+            4) view_logs ;;
+            5) security_settings ;;
+            6) configure_firewall ;;
+            7) change_db_password ;;
+            8) show_system_status ;;
+            9) show_about ;;
             0) return ;;
             *)
                 print_error "Invalid option"
